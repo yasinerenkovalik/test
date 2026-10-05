@@ -1,0 +1,9 @@
+global using AutoMapper;
+global using AutoMapper.QueryableExtensions;
+global using FluentValidation;
+global using MediatR;
+global using Microsoft.EntityFrameworkCore;
+global using Test.Application.Common.Exceptions;
+global using Test.Application.Common.Interfaces;
+global using Test.Domain.Entities;
+global using Test.Domain.Exceptions;

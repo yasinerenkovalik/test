@@ -1,0 +1,51 @@
+# Tek komutla her şey: docker compose up -d --build
+#   Arayüz:  http://localhost:3000
+#   Swagger: http://localhost:8080/swagger
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-test_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      # Aşağıdaki varsayılanlar SADECE lokal geliştirme içindir. Gerçek ortamda .env ile ezin.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev-only-postgres-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-test_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-dev-only-postgres-password}
+      JWT__SECRET: ${JWT_SECRET:-dev-only-jwt-secret-change-me-0123456789abcdef}
+      JWT__ISSUER: ${JWT_ISSUER:-Test.API}
+      JWT__AUDIENCE: ${JWT_AUDIENCE:-Test.Client}
+      Database__MigrateOnStartup: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - apilogs:/app/logs
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
+
+volumes:
+  pgdata:
+  apilogs:

@@ -1,0 +1,87 @@
+# Geliştirme modu (canlı güncelleme):
+#   docker compose -f docker-compose.dev.yml watch
+# Kod değişince:
+#   src/**/*.cs       -> container'a kopyalanır, dotnet watch hot reload / otomatik restart
+#   web/src/**        -> container'a kopyalanır, Vite HMR ile tarayıcı anında güncellenir
+#   *.csproj, package.json -> imaj yeniden derlenir (yeni paket eklediğinizde)
+#   Arayüz:  http://localhost:3000     Swagger: http://localhost:8080/swagger
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-test_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev-only-postgres-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-test_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-dev-only-postgres-password}
+      JWT__SECRET: ${JWT_SECRET:-dev-only-jwt-secret-change-me-0123456789abcdef}
+      JWT__ISSUER: ${JWT_ISSUER:-Test.API}
+      JWT__AUDIENCE: ${JWT_AUDIENCE:-Test.Client}
+      Database__MigrateOnStartup: "true"
+    ports:
+      - "8080:8080"
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+          ignore:
+            - "**/bin/"
+            - "**/obj/"
+            - "**/*.csproj"
+        - action: rebuild
+          path: ./Directory.Build.props
+        - action: rebuild
+          path: ./src/Test.Domain/Test.Domain.csproj
+        - action: rebuild
+          path: ./src/Test.Application/Test.Application.csproj
+        - action: rebuild
+          path: ./src/Test.Infrastructure/Test.Infrastructure.csproj
+        - action: rebuild
+          path: ./src/Test.API/Test.API.csproj
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.dev
+    depends_on:
+      - api
+    environment:
+      VITE_API_TARGET: http://api:8080
+    ports:
+      - "3000:5173"
+    develop:
+      watch:
+        - action: sync
+          path: ./web/src
+          target: /app/src
+        - action: sync
+          path: ./web/index.html
+          target: /app/index.html
+        - action: sync+restart
+          path: ./web/vite.config.js
+          target: /app/vite.config.js
+        - action: rebuild
+          path: ./web/package.json
+
+volumes:
+  pgdata:
